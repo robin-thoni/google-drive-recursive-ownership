@@ -14,13 +14,20 @@ import oauth2client.client
 
 def get_drive_service():
     OAUTH2_SCOPE = 'https://www.googleapis.com/auth/drive'
-    CLIENT_SECRETS = 'client_secrets.json'
-    flow = oauth2client.client.flow_from_clientsecrets(CLIENT_SECRETS, OAUTH2_SCOPE)
-    flow.redirect_uri = oauth2client.client.OOB_CALLBACK_URN
-    authorize_url = flow.step1_get_authorize_url()
-    print('Use this link for authorization: {}'.format(authorize_url))
-    code = six.moves.input('Verification code: ').strip()
-    credentials = flow.step2_exchange(code)
+
+    if os.path.exists("token.json"):
+        with open("token.json", "r") as token:
+            credentials = oauth2client.client.OAuth2Credentials.from_json(token.read())
+    else:
+        CLIENT_SECRETS = 'client_secrets.json'
+        flow = oauth2client.client.flow_from_clientsecrets(CLIENT_SECRETS, OAUTH2_SCOPE)
+        flow.redirect_uri = oauth2client.client.OOB_CALLBACK_URN
+        authorize_url = flow.step1_get_authorize_url()
+        print('Use this link for authorization: {}'.format(authorize_url))
+        code = six.moves.input('Verification code: ').strip()
+        credentials = flow.step2_exchange(code)
+        with open("token.json", "w") as token:
+            token.write(credentials.to_json())
     http = httplib2.Http()
     credentials.authorize(http)
     drive_service = googleapiclient.discovery.build('drive', 'v2', http=http)
