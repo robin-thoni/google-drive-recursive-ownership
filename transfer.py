@@ -85,7 +85,7 @@ def show_info(service, drive_item, prefix, permission_id):
         print('No title for this item:')
         pprint.pprint(drive_item)
 
-def grant_ownership(service, drive_item, prefix, permission_id, show_already_owned):
+def grant_ownership(service, drive_item, prefix, permission_id, show_already_owned, batch):
     full_path = os.path.join(os.path.sep.join(prefix), drive_item['title']).encode('utf-8', 'replace')
 
     #pprint.pprint(drive_item)
@@ -111,7 +111,8 @@ def grant_ownership(service, drive_item, prefix, permission_id, show_already_own
                   'pendingOwner': True,
                   'id': permission_id}
     try:
-        service.permissions().insert(fileId=drive_item['id'], body=permission, emailMessage='Automated recursive transfer of ownership.').execute()
+        req = service.permissions().insert(fileId=drive_item['id'], body=permission, emailMessage='Automated recursive transfer of ownership.')
+        batch.add(req)
     except googleapiclient.errors.HttpError as e:
         print('An error occurred inserting ownership permissions: {}'.format(e))
 
@@ -157,6 +158,21 @@ def process_all_files(service, callback=None, callback_args=None, minimum_prefix
             break
 
 
+class Batch:
+    def __init__(self, service):
+        self.service = service
+        self.batch = service.new_batch_http_request()
+
+    def add(self, request):
+        self.batch.add(request)
+        if len(self.batch._order) >= 100:
+            self.execute()
+
+    def execute(self):
+        if self.batch._order:
+            self.batch.execute()
+
+
 def main():
     minimum_prefix = six.text_type(sys.argv[1])
     new_owner = six.text_type(sys.argv[2])
@@ -165,9 +181,14 @@ def main():
     minimum_prefix_split = minimum_prefix.split(os.path.sep)
     print('Prefix: {}'.format(minimum_prefix_split))
     service = get_drive_service()
+
+    batch = Batch(service)
     permission_id = get_permission_id_for_email(service, new_owner)
     print('User {} is permission ID {}.'.format(new_owner, permission_id))
-    process_all_files(service, grant_ownership, {'permission_id': permission_id, 'show_already_owned': show_already_owned }, minimum_prefix_split)
+    process_all_files(service, grant_ownership, {'permission_id': permission_id, 'show_already_owned': show_already_owned, 'batch': batch }, minimum_prefix_split)
+
+    batch.execute()
+
     #print(files)
 
 
