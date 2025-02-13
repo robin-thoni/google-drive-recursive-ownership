@@ -131,11 +131,14 @@ def process_all_files(service, callback=None, callback_args=None, minimum_prefix
             param = {}
             if page_token:
                 param['pageToken'] = page_token
-            children = service.children().list(folderId=folder_id, **param).execute()
+            children = service.children().list(folderId=folder_id, fields='items/id,nextPageToken', **param).execute()
             for child in children.get('items', []):
-                item = service.files().get(fileId=child['id']).execute()
+                item = service.files().get(fileId=child['id'], fields='mimeType,kind,title,id,owners,shortcutDetails').execute()
                 #pprint.pprint(item)
                 if item['kind'] == 'drive#file':
+                    if item['mimeType'] == 'application/vnd.google-apps.shortcut':
+                        item = service.files().get(fileId=item['shortcutDetails']['targetId'], fields='mimeType,title,id,owners').execute()
+
                     if current_prefix[:len(minimum_prefix)] == minimum_prefix:
                         print(u'File: {} ({}, {})'.format(item['title'], current_prefix, item['id']))
                         callback(service, item, current_prefix, **callback_args)
