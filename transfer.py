@@ -37,6 +37,7 @@ class Batch:
     def execute(self):
         if self.batch._order:
             self.batch.execute()
+            self.batch = self.service.new_batch_http_request(callback=self._cb)
 
 class OAuthHandler(BaseHTTPRequestHandler):
     def do_GET(self):
