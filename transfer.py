@@ -11,6 +11,43 @@ import googleapiclient.http
 import googleapiclient.errors
 import oauth2client.client
 
+import urllib.parse
+import threading
+
+from http.server import BaseHTTPRequestHandler, HTTPServer
+
+class OAuthHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        # Parse the URL to extract the authorization code
+        parsed_url = urllib.parse.urlparse(self.path)
+        query_params = urllib.parse.parse_qs(parsed_url.query)
+
+        if "code" in query_params:
+            auth_code = query_params["code"][0]
+            print(f"Received OAuth Code: {auth_code}")
+            
+            # Send a response to the user
+            self.send_response(200)
+            self.send_header("Content-type", "text/html")
+            self.end_headers()
+            self.wfile.write(b"Authentication successful! You can close this window.")
+            
+            # Shut down the server after receiving the code
+            self.server.auth_code = auth_code
+            threading.Thread(target=self.server.shutdown).start()
+        else:
+            self.send_response(400)
+            self.end_headers()
+            self.wfile.write(b"Missing authorization code.")
+
+def start_server(port=8080):
+    server_address = ("", port)
+    httpd = HTTPServer(server_address, OAuthHandler)
+    print(f"Listening on port {port} for OAuth response...")
+    httpd.auth_code = None
+    httpd.serve_forever()
+    return httpd.auth_code
+
 
 def get_drive_service():
     OAUTH2_SCOPE = 'https://www.googleapis.com/auth/drive'
@@ -21,10 +58,10 @@ def get_drive_service():
     else:
         CLIENT_SECRETS = 'client_secrets.json'
         flow = oauth2client.client.flow_from_clientsecrets(CLIENT_SECRETS, OAUTH2_SCOPE)
-        flow.redirect_uri = oauth2client.client.OOB_CALLBACK_URN
+        flow.redirect_uri = "http://localhost:8080"
         authorize_url = flow.step1_get_authorize_url()
         print('Use this link for authorization: {}'.format(authorize_url))
-        code = six.moves.input('Verification code: ').strip()
+        code = start_server()
         credentials = flow.step2_exchange(code)
         with open("token.json", "w") as token:
             token.write(credentials.to_json())
