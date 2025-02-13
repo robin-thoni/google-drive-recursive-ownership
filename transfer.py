@@ -105,19 +105,10 @@ def grant_ownership(service, drive_item, prefix, permission_id, show_already_own
         print('    But, current user does not own the item.'.format(full_path))
         return
 
-    try:
-        permission = service.permissions().get(fileId=drive_item['id'], permissionId=permission_id).execute()
-        permission['role'] = 'owner'
-        print('    Upgrading existing permissions to ownership.')
-        return service.permissions().update(fileId=drive_item['id'], permissionId=permission_id, body=permission, transferOwnership=True).execute()
-    except googleapiclient.errors.HttpError as e:
-        if e.resp.status != 404:
-            print('An error occurred updating ownership permissions: {}'.format(e))
-            return
-
     print('    Creating new ownership permissions.')
-    permission = {'role': 'owner',
+    permission = {'role': 'writer',
                   'type': 'user',
+                  'pendingOwner': True,
                   'id': permission_id}
     try:
         service.permissions().insert(fileId=drive_item['id'], body=permission, emailMessage='Automated recursive transfer of ownership.').execute()
