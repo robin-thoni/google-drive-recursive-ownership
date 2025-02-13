@@ -16,6 +16,28 @@ import threading
 
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
+
+class Batch:
+    def __init__(self, service):
+        self.service = service
+        self.batch = service.new_batch_http_request(callback=self._cb)
+        self.results = []
+
+    def add(self, request):
+        self.batch.add(request)
+        if len(self.batch._order) >= 100:
+            self.execute()
+    
+    def _cb(self, request_id, response, exception):
+        if exception:
+            print('An error occurred: {}'.format(exception))
+        else:
+            self.results.append(response)
+
+    def execute(self):
+        if self.batch._order:
+            self.batch.execute()
+
 class OAuthHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         # Parse the URL to extract the authorization code
@@ -116,6 +138,23 @@ def grant_ownership(service, drive_item, prefix, permission_id, show_already_own
     except googleapiclient.errors.HttpError as e:
         print('An error occurred inserting ownership permissions: {}'.format(e))
 
+def list_folder(service, folder_id):
+    batch = Batch(service)
+    page_token = None
+    while True:
+        param = {}
+        if page_token:
+            param['pageToken'] = page_token
+        children = service.children().list(folderId=folder_id, fields='items/id,nextPageToken', **param).execute()
+        for child in children.get('items', []):
+            batch.add(service.files().get(fileId=child['id'], fields='mimeType,kind,title,id,owners,shortcutDetails'))
+        page_token = children.get('nextPageToken')
+        if not page_token:
+            break
+    batch.execute()
+    return batch.results
+
+
 def process_all_files(service, callback=None, callback_args=None, minimum_prefix=None, current_prefix=None, folder_id='root'):
     if minimum_prefix is None:
         minimum_prefix = []
@@ -126,51 +165,26 @@ def process_all_files(service, callback=None, callback_args=None, minimum_prefix
 
     print('Gathering file listings for prefix {}...'.format(current_prefix))
 
-    page_token = None
-    while True:
-        try:
-            param = {}
-            if page_token:
-                param['pageToken'] = page_token
-            children = service.children().list(folderId=folder_id, fields='items/id,nextPageToken', **param).execute()
-            for child in children.get('items', []):
-                item = service.files().get(fileId=child['id'], fields='mimeType,kind,title,id,owners,shortcutDetails').execute()
-                #pprint.pprint(item)
-                if item['kind'] == 'drive#file':
-                    if item['mimeType'] == 'application/vnd.google-apps.shortcut':
-                        item = service.files().get(fileId=item['shortcutDetails']['targetId'], fields='mimeType,title,id,owners').execute()
+    folder_items = list_folder(service, folder_id)
 
-                    if current_prefix[:len(minimum_prefix)] == minimum_prefix:
-                        print(u'File: {} ({}, {})'.format(item['title'], current_prefix, item['id']))
+    try:
+        for item in folder_items:
+            if item['kind'] == 'drive#file':
+                if item['mimeType'] == 'application/vnd.google-apps.shortcut':
+                    item = service.files().get(fileId=item['shortcutDetails']['targetId'], fields='mimeType,title,id,owners').execute()
+
+                if current_prefix[:len(minimum_prefix)] == minimum_prefix:
+                    print(u'File: {} ({}, {})'.format(item['title'], current_prefix, item['id']))
+                    callback(service, item, current_prefix, **callback_args)
+                if item['mimeType'] == 'application/vnd.google-apps.folder':
+                    print(u'Folder: {} ({}, {})'.format(item['title'], current_prefix, item['id']))
+                    next_prefix = current_prefix + [item['title']]
+                    comparison_length = min(len(next_prefix), len(minimum_prefix))
+                    if minimum_prefix[:comparison_length] == next_prefix[:comparison_length]:
+                        process_all_files(service, callback, callback_args, minimum_prefix, next_prefix, item['id'])
                         callback(service, item, current_prefix, **callback_args)
-                    if item['mimeType'] == 'application/vnd.google-apps.folder':
-                        print(u'Folder: {} ({}, {})'.format(item['title'], current_prefix, item['id']))
-                        next_prefix = current_prefix + [item['title']]
-                        comparison_length = min(len(next_prefix), len(minimum_prefix))
-                        if minimum_prefix[:comparison_length] == next_prefix[:comparison_length]:
-                            process_all_files(service, callback, callback_args, minimum_prefix, next_prefix, item['id'])
-                            callback(service, item, current_prefix, **callback_args)
-            page_token = children.get('nextPageToken')
-            if not page_token:
-                break
-        except googleapiclient.errors.HttpError as e:
-            print('An error occurred: {}'.format(e))
-            break
-
-
-class Batch:
-    def __init__(self, service):
-        self.service = service
-        self.batch = service.new_batch_http_request()
-
-    def add(self, request):
-        self.batch.add(request)
-        if len(self.batch._order) >= 100:
-            self.execute()
-
-    def execute(self):
-        if self.batch._order:
-            self.batch.execute()
+    except googleapiclient.errors.HttpError as e:
+        print('An error occurred: {}'.format(e))
 
 
 def main():
