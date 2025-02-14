@@ -184,6 +184,16 @@ def process_all_files(service, callback=None, callback_args=None, minimum_prefix
     except googleapiclient.errors.HttpError as e:
         print('An error occurred: {}'.format(e))
 
+def receive_ownership(service, owner):
+    children = list_files(service, q=f"'{owner}' in owners", fields='permissions')
+    batch = Batch(service)
+    pending_files = []
+    for file in children:
+        for perm in file.get('permissions', []):
+            if perm.get('role') == 'writer' and perm.get('pendingOwner', False):
+                pending_files.append(file)
+                batch.add(service.permissions().update(fileId=file['id'], permissionId=perm['id'], transferOwnership=True, body={'role': 'owner'}))
+    batch.execute()
 
 def main():
 
@@ -195,6 +205,9 @@ def main():
     transfer_parser.add_argument('minimum_prefix', help='The minimum prefix of the path to transfer ownership of.')
     transfer_parser.add_argument('new_owner', help='The email address of the new owner.')
     transfer_parser.add_argument('--show-already-owned', help='Show files that are already owned by the new owner.', action='store_true')
+
+    receive_parser = subparsers.add_parser('receive', help='receive ownership of all files in a Google Drive folder.')
+    receive_parser.add_argument('owner', help='The current owner to receive from.')
 
     args = parser.parse_args()
 
@@ -226,6 +239,8 @@ def main():
 
         batch.execute()
 
+    elif args.command == 'receive':
+        receive_ownership(drive_service, args.owner)
     else:
         parser.print_help()
         sys.exit(1)
