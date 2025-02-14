@@ -12,27 +12,38 @@ NOTE: The Google Drive API does not allow suppressing notifications for change o
 
 ### Setup
 
-    git clone https://github.com/davidstrauss/google-drive-recursive-ownership
-    pip install --upgrade google-api-python-client oauth2client six
+    git clone https://github.com/robin-thoni/google-drive-recursive-ownership
+    pip install -r requirements.txt
 
 ### Usage
 
 First, replace the [sample](https://github.com/gsuitedevs/python-samples/blob/d4fa75401e9b637f67da6fe021801d8b4cbd8cd0/drive/driveapp/client_secrets.json) `client_secrets.json` with your own [client secrets](https://github.com/googleapis/google-api-python-client/blob/master/docs/client-secrets.md). Otherwise, authorizations you create will be usable by anyone with access to the sample key (the entire internet).
 
-Next, if `transfer.py` is contained in a folder listed in your system's `PATH` this can be run from anywhere. Otherwise it needs to be run from the directory where `transfer.py` is located.
 
-    python  transfer.py  PATH-PREFIX  NEW-OWNER-EMAIL  SHOW-ALREADY-OWNER
-    
- - `PATH-PREFIX` assumes use of "/" or "\" as appropriate for your operating system.
+Start transfer:
 
-   * The `PATH-PREFIX` folder must be in **My Drive** section. For shared folders right click and select _Add to My Drive_.
+```
+# Windows Example:
+python transfer.py transfer "Folder 1\Folder 2\Folder 3" new_owner@example.com --show-already-owned
 
- - `SHOW-ALREADY-OWNER` "`true`"|"`false`" (default `true`) to hide feedback for files already set correctly.
-    
-Windows Example:
+# Mac/Linux Example:
+python transfer.py transfer "Folder 1/Folder 2/Folder 3" new_owner@example.com
+```
 
-    python transfer.py "Folder 1\Folder 2\Folder 3" new_owner@example.com true
+Receive files
 
-Mac/Linux Example:
+```
+python transfer.py receive previous_owner@example.com
+```
 
-    python transfer.py "Folder 1/Folder 2/Folder 3" new_owner@example.com false
+### Refs
+
+- https://developers.google.com/identity/protocols/oauth2/resources/oob-migration#desktop-client
+- https://developers.google.com/drive/api/guides/performance#overview
+- https://developers.google.com/drive/api/guides/shortcuts
+- https://developers.google.com/drive/api/guides/fields-parameter
+- https://developers.google.com/drive/api/reference/rest/v2/files/get
+- https://developers.google.com/drive/api/reference/rest/v2/files/list
+- https://developers.google.com/drive/api/reference/rest/v2/permissions/update
+- https://developers.google.com/drive/api/guides/search-files#python
+- https://developers.google.com/drive/api/guides/v2-to-v3-reference
