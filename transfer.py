@@ -72,25 +72,20 @@ def start_server(port=8080):
     httpd.serve_forever()
     return httpd.auth_code
 
-
-def get_drive_service(auth):
+def get_credentials(auth):
 
     if auth != 'interactive':
         with open(auth, "r") as token:
             credentials = oauth2client.client.OAuth2Credentials.from_json(token.read())
     else:
-        flow = oauth2client.client.flow_from_clientsecrets('client_secrets.json', 'https://www.googleapis.com/auth/drive')
+        flow = oauth2client.client.flow_from_clientsecrets('client_secrets.json', 'https://www.googleapis.com/auth/drive https://www.googleapis.com/auth/userinfo.email')
         flow.redirect_uri = "http://localhost:8080"
         authorize_url = flow.step1_get_authorize_url()
         print('Use this link for authorization: {}'.format(authorize_url))
         code = start_server()
         credentials = flow.step2_exchange(code)
-        with open("token.json", "w") as token:
-            token.write(credentials.to_json())
-    http = httplib2.Http()
-    credentials.authorize(http)
-    drive_service = googleapiclient.discovery.build('drive', 'v2', http=http)
-    return drive_service
+
+    return credentials
 
 def get_permission_id_for_email(service, email):
     try:
@@ -200,8 +195,17 @@ def main():
 
     args = parser.parse_args()
 
-    service = get_drive_service(args.auth)
+    credentials = get_credentials(args.auth)
+    http = httplib2.Http()
+    credentials.authorize(http)
+    oauth_service = googleapiclient.discovery.build('oauth2', 'v2', http=http)
 
+    user_info = oauth_service.userinfo().get(fields='email').execute()
+
+    with open(f"token_{user_info['email']}.json", "w") as token:
+        token.write(credentials.to_json())
+
+    drive_service = googleapiclient.discovery.build('drive', 'v2', http=http)
 
     if args.command == 'transfer':
         minimum_prefix = args.minimum_prefix
@@ -212,10 +216,10 @@ def main():
         minimum_prefix_split = minimum_prefix.split(os.path.sep)
         print('Prefix: {}'.format(minimum_prefix_split))
 
-        batch = Batch(service)
-        permission_id = get_permission_id_for_email(service, new_owner)
+        batch = Batch(drive_service)
+        permission_id = get_permission_id_for_email(drive_service, new_owner)
         print('User {} is permission ID {}.'.format(new_owner, permission_id))
-        process_all_files(service, grant_ownership, {'permission_id': permission_id, 'show_already_owned': show_already_owned, 'batch': batch }, minimum_prefix_split)
+        process_all_files(drive_service, grant_ownership, {'permission_id': permission_id, 'show_already_owned': show_already_owned, 'batch': batch }, minimum_prefix_split)
 
         batch.execute()
 
