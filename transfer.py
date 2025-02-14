@@ -133,21 +133,24 @@ def grant_ownership(service, drive_item, prefix, permission_id, show_already_own
     except googleapiclient.errors.HttpError as e:
         print('An error occurred inserting ownership permissions: {}'.format(e))
 
-def list_folder(service, folder_id):
-    batch = Batch(service)
+def list_files(service, folder_id = None, q = None, fields = ''):
+    items = []
     page_token = None
     while True:
         param = {}
         if page_token:
             param['pageToken'] = page_token
-        children = service.children().list(folderId=folder_id, fields='items/id,nextPageToken', **param).execute()
-        for child in children.get('items', []):
-            batch.add(service.files().get(fileId=child['id'], fields='mimeType,kind,title,id,owners,shortcutDetails'))
+
+        if folder_id:
+            q = f"'{folder_id}' in parents"
+
+        children = service.files().list(q=q, fields=f"items(id,{fields}),nextPageToken", **param).execute()
+        items.extend(children.get('items', []))
+        
         page_token = children.get('nextPageToken')
         if not page_token:
             break
-    batch.execute()
-    return batch.results
+    return items
 
 
 def process_all_files(service, callback=None, callback_args=None, minimum_prefix=None, current_prefix=None, folder_id='root'):
@@ -160,7 +163,7 @@ def process_all_files(service, callback=None, callback_args=None, minimum_prefix
 
     print('Gathering file listings for prefix {}...'.format(current_prefix))
 
-    folder_items = list_folder(service, folder_id)
+    folder_items = list_files(service, folder_id=folder_id, fields='mimeType,kind,title,id,owners,shortcutDetails')
 
     try:
         for item in folder_items:
