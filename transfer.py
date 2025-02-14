@@ -1,5 +1,6 @@
 #!/usr/bin/python
 
+import argparse
 import sys
 import pprint
 import os
@@ -189,22 +190,37 @@ def process_all_files(service, callback=None, callback_args=None, minimum_prefix
 
 
 def main():
-    minimum_prefix = six.text_type(sys.argv[1])
-    new_owner = six.text_type(sys.argv[2])
-    show_already_owned = False if len(sys.argv) > 3 and six.text_type(sys.argv[3]) == 'false' else True
-    print('Changing all files at path "{}" to owner "{}"'.format(minimum_prefix, new_owner))
-    minimum_prefix_split = minimum_prefix.split(os.path.sep)
-    print('Prefix: {}'.format(minimum_prefix_split))
-    service = get_drive_service()
 
-    batch = Batch(service)
-    permission_id = get_permission_id_for_email(service, new_owner)
-    print('User {} is permission ID {}.'.format(new_owner, permission_id))
-    process_all_files(service, grant_ownership, {'permission_id': permission_id, 'show_already_owned': show_already_owned, 'batch': batch }, minimum_prefix_split)
+    parser = argparse.ArgumentParser(description='Transfer ownership of all files in a Google Drive folder.')
+    subparsers = parser.add_subparsers(dest='command')
 
-    batch.execute()
+    transfer_parser = subparsers.add_parser('transfer', help='Transfer ownership of all files in a Google Drive folder.')
+    transfer_parser.add_argument('minimum_prefix', help='The minimum prefix of the path to transfer ownership of.')
+    transfer_parser.add_argument('new_owner', help='The email address of the new owner.')
+    transfer_parser.add_argument('--show-already-owned', help='Show files that are already owned by the new owner.', action='store_true')
 
-    #print(files)
+    args = parser.parse_args()
+
+    if args.command == 'transfer':
+        minimum_prefix = args.minimum_prefix
+        new_owner = args.new_owner
+        show_already_owned = args.show_already_owned
+    
+        print('Changing all files at path "{}" to owner "{}"'.format(minimum_prefix, new_owner))
+        minimum_prefix_split = minimum_prefix.split(os.path.sep)
+        print('Prefix: {}'.format(minimum_prefix_split))
+        service = get_drive_service()
+
+        batch = Batch(service)
+        permission_id = get_permission_id_for_email(service, new_owner)
+        print('User {} is permission ID {}.'.format(new_owner, permission_id))
+        process_all_files(service, grant_ownership, {'permission_id': permission_id, 'show_already_owned': show_already_owned, 'batch': batch }, minimum_prefix_split)
+
+        batch.execute()
+
+    else:
+        parser.print_help()
+        sys.exit(1)
 
 
 if __name__ == '__main__':
