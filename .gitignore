@@ -63,3 +63,4 @@ env.bak/
 venv.bak/
 
 token.json
+token_*.json

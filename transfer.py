@@ -73,15 +73,13 @@ def start_server(port=8080):
     return httpd.auth_code
 
 
-def get_drive_service():
-    OAUTH2_SCOPE = 'https://www.googleapis.com/auth/drive'
+def get_drive_service(auth):
 
-    if os.path.exists("token.json"):
-        with open("token.json", "r") as token:
+    if auth != 'interactive':
+        with open(auth, "r") as token:
             credentials = oauth2client.client.OAuth2Credentials.from_json(token.read())
     else:
-        CLIENT_SECRETS = 'client_secrets.json'
-        flow = oauth2client.client.flow_from_clientsecrets(CLIENT_SECRETS, OAUTH2_SCOPE)
+        flow = oauth2client.client.flow_from_clientsecrets('client_secrets.json', 'https://www.googleapis.com/auth/drive')
         flow.redirect_uri = "http://localhost:8080"
         authorize_url = flow.step1_get_authorize_url()
         print('Use this link for authorization: {}'.format(authorize_url))
@@ -192,6 +190,7 @@ def process_all_files(service, callback=None, callback_args=None, minimum_prefix
 def main():
 
     parser = argparse.ArgumentParser(description='Transfer ownership of all files in a Google Drive folder.')
+    parser.add_argument('--auth', help='Choose between interactive or existing credentials file.', default='interactive')
     subparsers = parser.add_subparsers(dest='command')
 
     transfer_parser = subparsers.add_parser('transfer', help='Transfer ownership of all files in a Google Drive folder.')
@@ -201,6 +200,9 @@ def main():
 
     args = parser.parse_args()
 
+    service = get_drive_service(args.auth)
+
+
     if args.command == 'transfer':
         minimum_prefix = args.minimum_prefix
         new_owner = args.new_owner
@@ -209,7 +211,6 @@ def main():
         print('Changing all files at path "{}" to owner "{}"'.format(minimum_prefix, new_owner))
         minimum_prefix_split = minimum_prefix.split(os.path.sep)
         print('Prefix: {}'.format(minimum_prefix_split))
-        service = get_drive_service()
 
         batch = Batch(service)
         permission_id = get_permission_id_for_email(service, new_owner)
